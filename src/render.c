@@ -6,71 +6,85 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include "list.h"
 #include "gl_math.h"
 #include "map.h"
+#include "cube.h"
 #include "shaders.h"
+#include "camera.h"
 #include "render.h"
 
-struct render {
+struct render_state {
     GLFWwindow *window;
+    struct camera camera;
+
+    list_head_t element_list;
 };
 
+GLFWwindow *window;
+
+static struct render_state render_state = {
+    .window = NULL,
+    .camera = {
+        .pos = { .x = 0, .y = 0, .z = 0 },
+        .direction = { .x = 0, .y = 0, .z = 0 },
+        .up = { .x = 0, .y = 1, .z = 0 },
+        .pitch = 0, .yaw = 0,
+
+        .fov = 60, .aspect = 640.f / 480.f,
+        .min_depth = .1f, .max_depth = 100.f,
+
+        .rot_speed = M_PI / 96,
+        .cam_speed = .03f,
+
+        .invert_pitch = 1,
+        .flat_movement = 1,
+    },
+    .element_list = LIST_HEAD_INIT(render_state.element_list),
+};
+
+/*
 static GLFWwindow *window;
+static list_head_t element_list = LIST_HEAD_INIT(element_list);
+ */
 
-/* tri is an array of 12 triangles */
-void render_cube(struct tri *tri, struct cube *cube)
+void render_element_add(struct render_element *element)
 {
-    struct vec3 tlf, tlb, trf, trb;
-    struct vec3 blf, blb, brf, brb;
+    glGenBuffers(1, &element->buffer_id);
+    glBindBuffer(GL_ARRAY_BUFFER, element->buffer_id);
 
-    tlf = cube->tlf;
-    brb = cube->brb;
+    glGenVertexArrays(1, &element->vertex_arr_id);
+    glBindVertexArray(element->vertex_arr_id);
+    glEnableVertexAttribArray(element->vertex_arr_id);
+    glBindBuffer(GL_ARRAY_BUFFER, element->buffer_id);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
-    tlb = (struct vec3) { .x = tlf.x, .y = tlf.y, .z = brb.z };
-    trf = (struct vec3) { .x = brb.x, .y = tlf.y, .z = tlf.z };
-    trb = (struct vec3) { .x = brb.x, .y = tlf.y, .z = brb.z };
-
-    blb = (struct vec3) { .x = tlf.x, .y = brb.y, .z = brb.z };
-    brf = (struct vec3) { .x = brb.x, .y = brb.y, .z = tlf.z };
-    blf = (struct vec3) { .x = tlf.x, .y = brb.y, .z = tlf.z };
-
-    tri[0] = (struct tri) { .p1 = tlf, .p2 = trf, .p3 = blf };
-    tri[1] = (struct tri) { .p1 = brf, .p2 = trf, .p3 = blf };
-
-    tri[2] = (struct tri) { .p1 = brf, .p2 = brb, .p3 = trf };
-    tri[3] = (struct tri) { .p1 = trf, .p2 = trb, .p3 = brb };
-
-    tri[4] = (struct tri) { .p1 = brb, .p2 = blb, .p3 = trb };
-    tri[5] = (struct tri) { .p1 = tlb, .p2 = trb, .p3 = blb };
-
-    tri[6] = (struct tri) { .p1 = tlf, .p2 = tlb, .p3 = blb };
-    tri[7] = (struct tri) { .p1 = blf, .p2 = blb, .p3 = tlf };
-
-    tri[8] = (struct tri) { .p1 = tlf, .p2 = tlb, .p3 = trb };
-    tri[9] = (struct tri) { .p1 = tlf, .p2 = trf, .p3 = trb };
-
-    tri[10] = (struct tri) { .p1 = blf, .p2 = blb, .p3 = brb };
-    tri[11] = (struct tri) { .p1 = blf, .p2 = brf, .p3 = brb };
+    list_add(&render_state.element_list, &element->element_node);
 }
 
-/* tri should contain steps * 2 triangles */
-void fill_cone(struct tri *tri, float base_rad, float top_rad, float height, int steps)
+static void render_element(struct render_state *state, struct render_element *element)
 {
-    int i;
-    float dtheta = (M_PI * 2) / steps;
-    float theta = 0;
+    if (element->update_tries)
+        (element->update_tries) (element);
 
-    for (i = 0; i < steps * 2; i += 2) {
-        tri[i + 0].p1 = (struct vec3) { .x = cosf(theta) * top_rad,           .y = height / 2, .z = sinf(theta) * top_rad };
-        tri[i + 0].p2 = (struct vec3) { .x = cosf(theta + dtheta) * top_rad,  .y = height / 2, .z = sinf(theta + dtheta) * top_rad };
-        tri[i + 0].p3 = (struct vec3) { .x = cos(theta) * base_rad,           .y = -height / 2,      .z = sinf(theta) * base_rad };
+    glUseProgram(element->shader_program);
 
-        tri[i + 1].p1 = (struct vec3) { .x = cosf(theta + dtheta) * top_rad,  .y = height / 2, .z = sinf(theta + dtheta) * top_rad };
-        tri[i + 1].p2 = (struct vec3) { .x = cosf(theta) * base_rad,          .y = -height/2,      .z = sinf(theta) * base_rad};
-        tri[i + 1].p3 = (struct vec3) { .x = cosf(theta + dtheta) * base_rad, .y = -height/2,      .z = sinf(theta + dtheta) * base_rad };
+    glUniformMatrix4fv(element->model_uniform_id, 1, GL_TRUE, &element->model.m[0][0]);
 
-        theta += dtheta;
-    }
+    glUniformMatrix4fv(element->proj_uniform_id, 1, GL_TRUE, &state->camera.proj.m[0][0]);
+    glUniformMatrix4fv(element->view_uniform_id, 1, GL_TRUE, &state->camera.view.m[0][0]);
+
+    glBindVertexArray(element->vertex_arr_id);
+    glDrawArrays(GL_TRIANGLES, 0, element->cur_tri_count * 3);
+}
+
+static void render_elements(struct render_state *state)
+{
+    struct render_element *element;
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    list_foreach_entry(&state->element_list, element, element_node)
+        render_element(state, element);
 }
 
 void render_main_loop(struct map *map)
@@ -79,13 +93,26 @@ void render_main_loop(struct map *map)
     int tri_count = 0;
     GLuint map_buffer_id;
     GLuint map_vertex_arr;
-    GLuint map_vs, map_fs;
     GLuint map_prog;
-    GLuint rot_uniform, scale_uniform, view_uniform, proj_uniform, model_uniform;
+    GLuint model_uniform, view_uniform, proj_uniform;
+    struct camera camera = {
+        .pos = { .x = map->startx + .5f, .y = .5f, .z = map->startz + .5f },
+        .direction = { .x = 0, .y = 0, .z = 0 },
+        .up = { .x = 0, .y = 1, .z = 0 },
+        .pitch = 0, .yaw = 0,
+
+        .fov = 60, .aspect = 640.f / 480.f,
+        .min_depth = .1f, .max_depth = 100.f,
+
+        .rot_speed = M_PI / 96,
+        .cam_speed = .03f,
+
+        .invert_pitch = 1,
+        .flat_movement = 1,
+    };
     int frames = 0;
     float prev_time;
-    struct mat4 view, proj, model;
-    int steps = 10;
+    struct mat4 model;
 
     glGenBuffers(1, &map_buffer_id);
     glBindBuffer(GL_ARRAY_BUFFER, map_buffer_id);
@@ -97,28 +124,12 @@ void render_main_loop(struct map *map)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
     map_render(map, &map_tris, &tri_count);
-#if 0
-    tri_count = steps * 2;
-    map_tris = malloc(sizeof(struct tri) * tri_count);
-    fill_cone(map_tris, .7f, .3f, .5f, steps);
-#endif
 
     glBufferData(GL_ARRAY_BUFFER, tri_count * sizeof(struct tri), map_tris, GL_STATIC_DRAW);
 
     printf("tri_count: %d\n", tri_count);
 
-    map_vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(map_vs, 1, &map_vertex_shader, NULL);
-    glCompileShader(map_vs);
-
-    map_fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(map_fs, 1, &map_fragment_shader, NULL);
-    glCompileShader(map_fs);
-
-    map_prog = glCreateProgram();
-    glAttachShader(map_prog, map_vs);
-    glAttachShader(map_prog, map_fs);
-    glLinkProgram(map_prog);
+    map_prog = create_shader(&map_vertex_shader, &map_fragment_shader);
 
     glUseProgram(map_prog);
 
@@ -126,180 +137,83 @@ void render_main_loop(struct map *map)
     proj_uniform = glGetUniformLocation(map_prog, "proj");
     model_uniform = glGetUniformLocation(map_prog, "model");
 
-    struct vec3 cam_pos = { .x = -1, .y = .5f, .z = -1 };
-    struct vec3 cam_direction = { .x = 0, .y = 0, .z = 0 };
-    float cam_pitch = 0, cam_yaw = .0f;
-    /* struct vec4 cam_direction = { .x = .0f, .y = .0f, .z = .0f }; */
-    /* struct vec3 target_pos = { .x = .0f, .y = .0f, .z = .0f }; */
-    struct vec3 cam_up = { .x = 0, .y = 1, .z = 0 };
-    float rot_speed = M_PI / 64.f;
-    float cam_speed = .03f;
+    mat4_make_identity(&model);
+    camera_recalc(&camera);
 
     prev_time = glfwGetTime();
+
+    double old_xpos = 0, old_ypos = 0;
+    int cursor_disabled = 0;
     while (!glfwWindowShouldClose(window)) {
-#if 0
-        if (glfwGetKey(window, GLFW_KEY_W)) {
-            cam_pos = (struct vec3) { .x = cam_pos.x + target_pos.x * .01f, .y = cam_pos.y + target_pos.y * .01f, .z = cam_pos.z + target_pos.z * .01f };
+        int recalc = 0;
+        struct key_callback {
+            int key;
+            void (*callback) (struct camera *, float seconds);
+        } key_handlers[] = {
+            { GLFW_KEY_A, camera_move_left },
+            { GLFW_KEY_D, camera_move_right },
+            { GLFW_KEY_W, camera_move_forward },
+            { GLFW_KEY_S, camera_move_backward },
+            { GLFW_KEY_DOWN, camera_rotate_pitch_up },
+            { GLFW_KEY_UP, camera_rotate_pitch_down },
+            { GLFW_KEY_LEFT, camera_rotate_yaw_up },
+            { GLFW_KEY_RIGHT, camera_rotate_yaw_down },
+            { 0, NULL }
+        };
+        struct key_callback *handler;
+        double xpos, ypos;
+
+        for (handler = key_handlers; handler->callback; handler++) {
+            if (glfwGetKey(window, handler->key)) {
+                (handler->callback) (&camera, 1.f / 60.f);
+                recalc = 1;
+            }
         }
 
-        if (glfwGetKey(window, GLFW_KEY_S))
-            cam_pos = (struct vec3) { .x = cam_pos.x - target_pos.x * .01f, .y = cam_pos.y - target_pos.y * .01f, .z = cam_pos.z - target_pos.z * .01f };
-
-        if (glfwGetKey(window, GLFW_KEY_W)) {
-            struct vec3 tmp;
-            vec3_cross(&tmp, &target_pos, &cam_up);
-            vec3_normalize(&tmp);
-            cam_pos = (struct vec3) { .x = cam_pos.x + tmp.x * .01f, .y = cam_pos.y + tmp.y * .01f, .z = cam_pos.z + tmp.z * .01f };
+        if (glfwGetKey(window, GLFW_KEY_M)) {
+            if (!cursor_disabled) {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                cursor_disabled = 1;
+            } else {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                cursor_disabled = 0;
+            }
         }
 
-        if (glfwGetKey(window, GLFW_KEY_S)) {
-            struct vec3 tmp;
-            vec3_cross(&tmp, &target_pos, &cam_up);
-            vec3_normalize(&tmp);
-            cam_pos = (struct vec3) { .x = cam_pos.x - tmp.x * .01f, .y = cam_pos.y - tmp.y * .01f, .z = cam_pos.z - tmp.z * .01f };
-        }
-#endif
-        if (glfwGetKey(window, GLFW_KEY_A)) {
-            struct vec3 tmp, move, res;
-            vec3_cross(&tmp, &cam_direction, &cam_up);
-            vec3_normalize(&tmp);
+        glfwGetCursorPos(window, &xpos, &ypos);
 
-            vec3_mul_scaler(&move, &tmp, -cam_speed);
-            vec3_add(&res, &cam_pos, &move);
-            memcpy(&cam_pos, &res, sizeof(cam_pos));
-            //cam_pos.z += .01;
+        if (xpos != old_xpos) {
+            double diff = xpos - old_xpos;
+            if (diff < 0)
+                camera_rotate_yaw_up(&camera, diff / 60);
+            else
+                camera_rotate_yaw_down(&camera, diff / 60);
+
+            recalc = 1;
+            old_xpos = xpos;
         }
 
-        if (glfwGetKey(window, GLFW_KEY_D)) {
-            struct vec3 tmp, move, res;
-            vec3_cross(&tmp, &cam_direction, &cam_up);
-            vec3_normalize(&tmp);
+        if (ypos != old_ypos) {
+            double diff = ypos - old_ypos;
+            if (diff < 0)
+                camera_rotate_pitch_down(&camera, diff / 60);
+            else
+                camera_rotate_pitch_up(&camera, diff / 60);
 
-            vec3_mul_scaler(&move, &tmp, cam_speed);
-            vec3_add(&res, &cam_pos, &move);
-            memcpy(&cam_pos, &res, sizeof(cam_pos));
-            //cam_pos.z -= .01;
+            recalc = 1;
+            old_ypos = ypos;
         }
 
-        if (glfwGetKey(window, GLFW_KEY_W)) {
-            struct vec3 move, res;
-            vec3_mul_scaler(&move, &cam_direction, cam_speed);
-            vec3_add(&res, &cam_pos, &move);
-            memcpy(&cam_pos, &res, sizeof(cam_pos));
-            //cam_pos.x -= .01;
-        }
 
-        if (glfwGetKey(window, GLFW_KEY_S)) {
-            struct vec3 move, res;
-            vec3_mul_scaler(&move, &cam_direction, -cam_speed);
-            vec3_add(&res, &cam_pos, &move);
-            memcpy(&cam_pos, &res, sizeof(cam_pos));
-            //cam_pos.x += .01;
-        }
-
-        if (glfwGetKey(window, GLFW_KEY_DOWN)) {
-            if (cam_pitch < M_PI / 2 - rot_speed)
-                cam_pitch += rot_speed;
-        }
-
-        if (glfwGetKey(window, GLFW_KEY_UP)) {
-            if (cam_pitch > -M_PI / 2 + rot_speed)
-                cam_pitch -= rot_speed;
-        }
-
-        if (glfwGetKey(window, GLFW_KEY_LEFT)) {
-            cam_yaw += rot_speed;
-        }
-
-        if (glfwGetKey(window, GLFW_KEY_RIGHT)) {
-            cam_yaw -= rot_speed;
-        }
-
-#if 0
-        if (glfwGetKey(window, GLFW_KEY_UP)) {
-            struct mat4 rot;
-            struct vec4 vec;
-            mat4_make_rotation(&rot, M_PI / 64, ROT_Y);
-            mat4_mult_vec4(&vec, &rot, &(struct vec4) { .x = target_pos.x, .y = target_pos.y, .z = target_pos.z, .w = 1 });
-            target_pos = (struct vec3) { .x = vec.x, .y = vec.y, .z = vec.z };
-            //cam_pos.y += .01;
-            //target_pos.y += .01;
-        }
-            //xtheta += (M_PI / 64);
-
-        if (glfwGetKey(window, GLFW_KEY_DOWN)) {
-            struct mat4 rot;
-            struct vec4 vec;
-            mat4_make_rotation(&rot, -M_PI / 64, ROT_Y);
-            mat4_mult_vec4(&vec, &rot, &(struct vec4) { .x = target_pos.x, .y = target_pos.y, .z = target_pos.z, .w = 1 });
-            target_pos = (struct vec3) { .x = vec.x, .y = vec.y, .z = vec.z };
-            //cam_pos.y -= .01;
-            //target_pos.y -= .01;
-        }
-            //xtheta -= (M_PI / 64);
-
-        if (glfwGetKey(window, GLFW_KEY_LEFT))
-            //ytheta -= (M_PI / 64);
-
-        if (glfwGetKey(window, GLFW_KEY_RIGHT))
-            //ytheta += (M_PI / 64);
-#endif
-
-        /*
-        //mat4_make_translation(&tmp1, &cam_pos);
-        mat4_make_rotation(&tmp2, xtheta, ROT_X);
-
-        //mat4_mult(&tmp3, &tmp1, &tmp2);
-
-        mat4_make_rotation(&tmp1, ytheta, ROT_Y);
-
-        mat4_mult(&rot, &tmp1, &tmp2);
-
-        struct vec4 nt;
-
-        mat4_mult_vec4(&nt, &rot, &(struct vec4) { .x = target_pos.x, .y = target_pos.y, .z = target_pos.z, .w = 0 }); */
-
-        //mat4_make_scale(&scale, &(struct vec3) { .x = fscale, .y = fscale, .z = fscale });
-        //mat4_make_rotation(&scale, M_PI / 4, ROT_X);
-        //mat4_make_identity(&proj);
-        //mat4_make_rotation(&model, M_PI / 4, ROT_X);
-        mat4_make_identity(&model);
-
-        //cam_pos = (struct vec3) { .x = sinf(glfwGetTime()) * .5f, .z = cosf(glfwGetTime()) * .5f, .y = .0f };
-
-        struct vec3 target_pos;
-        cam_direction = (struct vec3) { .x = (cosf(cam_pitch) * sinf(cam_yaw)),
-                                        .y = sinf(cam_pitch),
-                                        .z = (cosf(cam_pitch) * cosf(cam_yaw)) };
-        /*
-        cam_direction = (struct vec3) { .x = cosf(cam_pitch),
-                                        .y = sinf(cam_pitch),
-                                        .z = cosf(cam_pitch)};
-        cam_direction = (struct vec3) { .x = cosf(cam_yaw),
-                                        .y = 0,
-                                        .z = sinf(cam_yaw) };
-         */
-        vec3_normalize(&cam_direction);
-
-        printf("Pitch: %f, Yaw: %f\n", cam_pitch, cam_yaw);
-        printf("cam_direction: ");
-        print_vec3(&cam_direction);
-
-        vec3_add(&target_pos, &cam_pos, &cam_direction);
-
-        printf("Target_pos: ");
-        print_vec3(&target_pos);
-
-        mat4_look_at(&view, &cam_pos, &target_pos, &cam_up);
-
-        mat4_make_perspective(&proj, 60, 640.f / 480.f, .1f, 100.f);
+        if (recalc)
+            camera_recalc(&camera);
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(map_prog);
 
         glUniformMatrix4fv(model_uniform, 1, GL_TRUE, &model.m[0][0]);
-        glUniformMatrix4fv(proj_uniform, 1, GL_TRUE, &proj.m[0][0]);
-        glUniformMatrix4fv(view_uniform, 1, GL_TRUE, &view.m[0][0]);
+        glUniformMatrix4fv(proj_uniform, 1, GL_TRUE, &camera.proj.m[0][0]);
+        glUniformMatrix4fv(view_uniform, 1, GL_TRUE, &camera.view.m[0][0]);
 
         glBindVertexArray(map_vertex_arr);
         glDrawArrays(GL_TRIANGLES, 0, tri_count * 3);

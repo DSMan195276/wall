@@ -5,6 +5,7 @@
 
 struct map {
     int width, height;
+    float startx, startz;
     int *walls; /* width * height */
 };
 
