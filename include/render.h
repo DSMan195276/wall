@@ -6,15 +6,24 @@
 
 #include "list.h"
 #include "gl_math.h"
-#include "map.h"
+#include "camera.h"
+
+struct render_state {
+    GLFWwindow *window;
+    struct camera camera;
+
+    double m_xpos, m_ypos;
+
+    list_head_t element_list;
+};
 
 struct render_element {
     list_node_t element_node; /* List of elements */
 
     /* 
-     * A malloc'd buffer of 'struct tri' objects.
+     * A buffer of 'struct tri' objects.
      *
-     * update_tries edits and resizes this buffer.
+     * update_tries can edit and resizes this buffer.
      *
      * update_tries also calls glBufferData to apply the data to the buffer
      * 'buffer_id'
@@ -35,12 +44,22 @@ struct render_element {
     struct mat4 model;
 };
 
-void render_cube(struct tri *tri, struct cube *cube);
-void render_main_loop(struct map *map);
+#define RENDER_ELEMENT_INIT(element) \
+    { \
+        .element_node = LIST_NODE_INIT((element).element_node), \
+        .model = MAT4_IDENTITY(), \
+    }
 
-void render_element_add(struct render_element *);
+static inline void rener_element_init(struct render_element *element)
+{
+    *element = (struct render_element)RENDER_ELEMENT_INIT(*element);
+}
 
-int renderer_start(void);
-int renderer_end(void);
+void render_main_loop(struct render_state *);
+
+void render_element_add(struct render_state *, struct render_element *);
+
+int renderer_start(struct render_state *);
+int renderer_end(struct render_state *);
 
 #endif

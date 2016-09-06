@@ -68,17 +68,24 @@ void mat4_mult_vec4(struct vec4 *out, const struct mat4 *mat, const struct vec4 
 void mat4_look_at(struct mat4 *out, const struct vec3 *cam, const struct vec3 *target, const struct vec3 *up);
 void mat4_make_perspective(struct mat4 *out, float fov, float aspect, float near, float far);
 
+#define MAT4_IDENTITY() \
+    { \
+        .m = { \
+            { 1, 0, 0, 0 }, \
+            { 0, 1, 0, 0 }, \
+            { 0, 0, 1, 0 }, \
+            { 0, 0, 0, 1 }, \
+        }, \
+    }
+
+
 static inline void mat4_make_identity(struct mat4 *out)
 {
-    *out = (struct mat4) {
-        .m = {
-            { 1, 0, 0, 0 },
-            { 0, 1, 0, 0 },
-            { 0, 0, 1, 0 },
-            { 0, 0, 0, 1 },
-        },
-    };
+    *out = (struct mat4)MAT4_IDENTITY();
 }
+
+#define PRvec3 "[%5f %5f %5f]"
+#define Pvec3(vec) ((vec)->x), ((vec)->y), ((vec)->z)
 
 void print_vec3(struct vec3 *vec);
 void print_mat4(struct mat4 *mat);

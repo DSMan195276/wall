@@ -14,52 +14,20 @@
 #include "camera.h"
 #include "render.h"
 
-struct render_state {
-    GLFWwindow *window;
-    struct camera camera;
+#define USE_MOUSE 1
 
-    list_head_t element_list;
-};
-
-GLFWwindow *window;
-
-static struct render_state render_state = {
-    .window = NULL,
-    .camera = {
-        .pos = { .x = 0, .y = 0, .z = 0 },
-        .direction = { .x = 0, .y = 0, .z = 0 },
-        .up = { .x = 0, .y = 1, .z = 0 },
-        .pitch = 0, .yaw = 0,
-
-        .fov = 60, .aspect = 640.f / 480.f,
-        .min_depth = .1f, .max_depth = 100.f,
-
-        .rot_speed = M_PI / 96,
-        .cam_speed = .03f,
-
-        .invert_pitch = 1,
-        .flat_movement = 1,
-    },
-    .element_list = LIST_HEAD_INIT(render_state.element_list),
-};
-
-/*
-static GLFWwindow *window;
-static list_head_t element_list = LIST_HEAD_INIT(element_list);
- */
-
-void render_element_add(struct render_element *element)
+void render_element_add(struct render_state *state, struct render_element *element)
 {
     glGenBuffers(1, &element->buffer_id);
     glBindBuffer(GL_ARRAY_BUFFER, element->buffer_id);
 
     glGenVertexArrays(1, &element->vertex_arr_id);
     glBindVertexArray(element->vertex_arr_id);
-    glEnableVertexAttribArray(element->vertex_arr_id);
+    glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, element->buffer_id);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
-    list_add(&render_state.element_list, &element->element_node);
+    list_add(&state->element_list, &element->element_node);
 }
 
 static void render_element(struct render_state *state, struct render_element *element)
@@ -81,70 +49,58 @@ static void render_element(struct render_state *state, struct render_element *el
 static void render_elements(struct render_state *state)
 {
     struct render_element *element;
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     list_foreach_entry(&state->element_list, element, element_node)
         render_element(state, element);
 }
 
-void render_main_loop(struct map *map)
+static void render_frame(struct render_state *state)
 {
-    struct tri *map_tris = NULL;
-    int tri_count = 0;
-    GLuint map_buffer_id;
-    GLuint map_vertex_arr;
-    GLuint map_prog;
-    GLuint model_uniform, view_uniform, proj_uniform;
-    struct camera camera = {
-        .pos = { .x = map->startx + .5f, .y = .5f, .z = map->startz + .5f },
-        .direction = { .x = 0, .y = 0, .z = 0 },
-        .up = { .x = 0, .y = 1, .z = 0 },
-        .pitch = 0, .yaw = 0,
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        .fov = 60, .aspect = 640.f / 480.f,
-        .min_depth = .1f, .max_depth = 100.f,
+    render_elements(state);
 
-        .rot_speed = M_PI / 96,
-        .cam_speed = .03f,
+    glfwSwapBuffers(state->window);
 
-        .invert_pitch = 1,
-        .flat_movement = 1,
-    };
+    glfwPollEvents();
+}
+
+void render_mouse_callback(GLFWwindow *window, double xpos, double ypos)
+{
+    struct render_state *state = glfwGetWindowUserPointer(window);
+    double diffx = xpos - state->m_xpos;
+    double diffy = ypos - state->m_ypos;
+
+    state->m_xpos = xpos;
+    state->m_ypos = ypos;
+
+    printf("xpos: %f, ypos: %f\n", xpos, ypos);
+
+    if (diffx)
+        state->camera.yaw = -xpos / 1000;
+
+    if (diffy)
+        state->camera.pitch = ypos / 1000;
+
+    camera_recalc(&state->camera);
+}
+
+void render_main_loop(struct render_state *state)
+{
     int frames = 0;
     float prev_time;
-    struct mat4 model;
 
-    glGenBuffers(1, &map_buffer_id);
-    glBindBuffer(GL_ARRAY_BUFFER, map_buffer_id);
-
-    glGenVertexArrays(1, &map_vertex_arr);
-    glBindVertexArray(map_vertex_arr);
-    glEnableVertexAttribArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, map_buffer_id);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-
-    map_render(map, &map_tris, &tri_count);
-
-    glBufferData(GL_ARRAY_BUFFER, tri_count * sizeof(struct tri), map_tris, GL_STATIC_DRAW);
-
-    printf("tri_count: %d\n", tri_count);
-
-    map_prog = create_shader(&map_vertex_shader, &map_fragment_shader);
-
-    glUseProgram(map_prog);
-
-    view_uniform = glGetUniformLocation(map_prog, "view");
-    proj_uniform = glGetUniformLocation(map_prog, "proj");
-    model_uniform = glGetUniformLocation(map_prog, "model");
-
-    mat4_make_identity(&model);
-    camera_recalc(&camera);
+    camera_recalc(&state->camera);
 
     prev_time = glfwGetTime();
 
-    double old_xpos = 0, old_ypos = 0;
-    int cursor_disabled = 0;
-    while (!glfwWindowShouldClose(window)) {
+    glfwSetWindowUserPointer(state->window, state);
+    glfwSetCursorPosCallback(state->window, render_mouse_callback);
+
+#if USE_MOUSE
+    int cursor_disabled = 0, m_pressed;
+#endif
+    while (!glfwWindowShouldClose(state->window)) {
         int recalc = 0;
         struct key_callback {
             int key;
@@ -161,78 +117,45 @@ void render_main_loop(struct map *map)
             { 0, NULL }
         };
         struct key_callback *handler;
-        double xpos, ypos;
 
         for (handler = key_handlers; handler->callback; handler++) {
-            if (glfwGetKey(window, handler->key)) {
-                (handler->callback) (&camera, 1.f / 60.f);
+            if (glfwGetKey(state->window, handler->key)) {
+                (handler->callback) (&state->camera, 1.f / 60.f);
                 recalc = 1;
             }
         }
 
-        if (glfwGetKey(window, GLFW_KEY_M)) {
+#if USE_MOUSE
+        if (glfwGetKey(state->window, GLFW_KEY_M) & !m_pressed) {
             if (!cursor_disabled) {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 cursor_disabled = 1;
             } else {
-                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 cursor_disabled = 0;
             }
-        }
-
-        glfwGetCursorPos(window, &xpos, &ypos);
-
-        if (xpos != old_xpos) {
-            double diff = xpos - old_xpos;
-            if (diff < 0)
-                camera_rotate_yaw_up(&camera, diff / 60);
-            else
-                camera_rotate_yaw_down(&camera, diff / 60);
-
-            recalc = 1;
-            old_xpos = xpos;
-        }
-
-        if (ypos != old_ypos) {
-            double diff = ypos - old_ypos;
-            if (diff < 0)
-                camera_rotate_pitch_down(&camera, diff / 60);
-            else
-                camera_rotate_pitch_up(&camera, diff / 60);
-
-            recalc = 1;
-            old_ypos = ypos;
-        }
-
+            m_pressed = 1;
+        } else
+            m_pressed = 0;
+#endif
 
         if (recalc)
-            camera_recalc(&camera);
+            camera_recalc(&state->camera);
 
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glUseProgram(map_prog);
-
-        glUniformMatrix4fv(model_uniform, 1, GL_TRUE, &model.m[0][0]);
-        glUniformMatrix4fv(proj_uniform, 1, GL_TRUE, &camera.proj.m[0][0]);
-        glUniformMatrix4fv(view_uniform, 1, GL_TRUE, &camera.view.m[0][0]);
-
-        glBindVertexArray(map_vertex_arr);
-        glDrawArrays(GL_TRIANGLES, 0, tri_count * 3);
-
-        glfwPollEvents();
-
-        glfwSwapBuffers(window);
+        render_frame(state);
 
         frames++;
         if (frames == 60) {
             float f = glfwGetTime();
             printf("FPS: %f\n", 60 / (f - prev_time));
+            printf("Position: "PRvec3"\n", Pvec3(&state->camera.pos));
             prev_time = f;
             frames = 0;
         }
     }
 }
 
-int renderer_start(void)
+int renderer_start(struct render_state *state)
 {
     if (!glfwInit()) {
         fprintf(stderr, "Error: GLFW3 would not start\n");
@@ -244,13 +167,13 @@ int renderer_start(void)
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    window = glfwCreateWindow(640, 480, "Wall!", NULL, NULL);
-    if (!window) {
+    state->window = glfwCreateWindow(640, 480, "Wall!", NULL, NULL);
+    if (!state->window) {
         fprintf(stderr, "ERROR: Could not create window\n");
         return 1;
     }
 
-    glfwMakeContextCurrent(window);
+    glfwMakeContextCurrent(state->window);
 
     glewExperimental = GL_TRUE;
     glewInit();
@@ -273,7 +196,7 @@ int renderer_start(void)
     return 0;
 }
 
-int renderer_end(void)
+int renderer_end(struct render_state *state)
 {
     glfwTerminate();
 

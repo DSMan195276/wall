@@ -39,12 +39,11 @@ static void get_usable_direction(struct camera *cam, struct vec3 *out)
 
 static void camera_move_for_back(struct camera *cam, float seconds, int direction)
 {
-    struct vec3 move, res, dir;
+    struct vec3 move, dir;
     get_usable_direction(cam, &dir);
 
     vec3_mul_scaler(&move, &dir, cam->cam_speed * direction);
-    vec3_add(&res, &cam->pos, &move);
-    memcpy(&cam->pos, &res, sizeof(cam->pos));
+    vec3_add(&cam->pos, &cam->pos, &move);
 }
 
 void camera_move_forward(struct camera *cam, float seconds)
@@ -59,15 +58,14 @@ void camera_move_backward(struct camera *cam, float seconds)
 
 static void camera_move_left_right(struct camera *cam, float seconds, int direction)
 {
-    struct vec3 tmp, move, res, dir;
+    struct vec3 tmp, move, dir;
     get_usable_direction(cam, &dir);
 
     vec3_cross(&tmp, &dir, &cam->up);
     vec3_normalize(&tmp);
 
     vec3_mul_scaler(&move, &tmp, cam->cam_speed * direction);
-    vec3_add(&res, &cam->pos, &move);
-    memcpy(&cam->pos, &res, sizeof(cam->pos));
+    vec3_add(&cam->pos, &cam->pos, &move);
 }
 
 void camera_move_left(struct camera *cam, float seconds)

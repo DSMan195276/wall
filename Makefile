@@ -1,7 +1,9 @@
 
-Q := @
 CC := gcc
 BINDIR := ./bin
+
+CFLAGS := -Wall -I./include -O2 -march=native -fno-strict-aliasing -g
+LDFLAGS := -lglfw -lGLEW -lGL -lm
 
 PROG := prog
 
@@ -13,9 +15,6 @@ SHADER_VERT_SRCS := $(wildcard ./src/shaders/*.vert)
 SHADER_FRAG_SRCS := $(wildcard ./src/shaders/*.frag)
 SHADER_OBJS := $(SHADER_VERT_SRCS:.vert=.vx) $(SHADER_FRAG_SRCS:.frag=.fx)
 
-CFLAGS := -Wall -I./include -O2 -march=native -fno-strict-aliasing -g
-LDFLAGS := -lglfw -lGLEW -lGL -lm
-
 CLEAN_LIST += $(OBJS)
 CLEAN_LIST += $(SHADER_OBJS)
 CLEAN_LIST += $(BINDIR)/$(PROG)
@@ -24,7 +23,7 @@ CLEAN_LIST += $(DEPS)
 all: $(BINDIR)/$(PROG)
 
 clean:
-	$(Q)for file in $(CLEAN_LIST); do \
+	@for file in $(CLEAN_LIST); do \
 		if [ -e $$file ]; then \
 			echo "rm -rf $$file"; \
 			rm -rf $$file; \
@@ -43,10 +42,10 @@ $(BINDIR)/$(PROG): $(OBJS)
 # We make xxd read from stdin to keep it from outputting a full array declaraction
 # This way it just puts out comma-separated bytes, like "0x01, 0x02, 0x03, ..."
 %.vx: %.vert
-	cat $< | xxd -i - $@
+	cat $< | (xxd -i -; echo ", '\0'") > $@
 
 %.fx: %.frag
-	cat $< | xxd -i - $@
+	cat $< | (xxd -i -; echo ", '\0'") > $@
 
 src/shaders.c: $(SHADER_OBJS)
 

@@ -7,4 +7,6 @@
 #define container_of(ptr, type, member) \
     ((type *) ((char*)(ptr) - offsetof(type, member)))
 
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(*arr))
+
 #endif

@@ -12,9 +12,9 @@ uniform mat4 model;
 
 void main()
 {
-    color = vec4(.5 * abs(cos(vp.x * 1.2 / PI)) + .0,
-                 .4 * abs(cos(vp.y + .5)) + .0,
-                 .4 * abs(cos(vp.z * 4 / PI)) + .1,
+    color = vec4(.2 * abs(sin(vp.x / .5)) + .1,
+                 .4 * abs(sin((vp.y - .2) / .6 * 2)) + .1,
+                 .2 * abs(sin(vp.z / .1)) + .1,
                  1.0);
 
     gl_Position = proj * view * model * vec4(vp, 1);
