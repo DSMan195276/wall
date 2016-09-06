@@ -168,7 +168,7 @@ int renderer_start(struct render_state *state)
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    state->window = glfwCreateWindow(640, 480, "Wall!", NULL, NULL);
+    state->window = glfwCreateWindow(1024, 768, "Wall!", NULL, NULL);
     if (!state->window) {
         fprintf(stderr, "ERROR: Could not create window\n");
         return 1;

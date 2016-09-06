@@ -53,7 +53,7 @@ static struct render_state render_state = {
         .up = { .x = 0, .y = 1, .z = 0 },
         .pitch = 0, .yaw = 0,
 
-        .fov = 60, .aspect = 640.f / 480.f,
+        .fov = 60, .aspect = 1024.f / 768.f,
         .min_depth = .1f, .max_depth = 100.f,
 
         .rot_speed = M_PI / 96,
