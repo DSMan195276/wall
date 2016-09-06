@@ -98,7 +98,7 @@ void render_main_loop(struct render_state *state)
     glfwSetCursorPosCallback(state->window, render_mouse_callback);
 
 #if USE_MOUSE
-    int cursor_disabled = 0, m_pressed;
+    int cursor_disabled = 0, m_pressed = 0;
 #endif
     while (!glfwWindowShouldClose(state->window)) {
         int recalc = 0;
@@ -126,7 +126,7 @@ void render_main_loop(struct render_state *state)
         }
 
 #if USE_MOUSE
-        if (glfwGetKey(state->window, GLFW_KEY_M) & !m_pressed) {
+        if (glfwGetKey(state->window, GLFW_KEY_M) && !m_pressed) {
             if (!cursor_disabled) {
                 glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 cursor_disabled = 1;
@@ -135,8 +135,9 @@ void render_main_loop(struct render_state *state)
                 cursor_disabled = 0;
             }
             m_pressed = 1;
-        } else
+        } else if (!glfwGetKey(state->window, GLFW_KEY_M)) {
             m_pressed = 0;
+        }
 #endif
 
         if (recalc)

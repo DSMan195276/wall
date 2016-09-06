@@ -22,6 +22,9 @@ CLEAN_LIST += $(DEPS)
 
 all: $(BINDIR)/$(PROG)
 
+$(BINDIR):
+	mkdir $(BINDIR)
+
 clean:
 	@for file in $(CLEAN_LIST); do \
 		if [ -e $$file ]; then \
@@ -30,7 +33,7 @@ clean:
 		fi \
 	done
 
-$(BINDIR)/$(PROG): $(OBJS)
+$(BINDIR)/$(PROG): $(OBJS) | $(BINDIR)
 	gcc $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS)
 
 %.o: %.c
