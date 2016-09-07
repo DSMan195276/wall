@@ -134,6 +134,7 @@ void mat4_make_rotation(struct mat4 *mat, float theta, enum rot rot)
 void mat4_mult(struct mat4 *out, const struct mat4 *mat, const struct mat4 *mat2)
 {
     const char size = 4;
+    struct mat4 ret;
     const float (*a)[4] = mat->m, (*b)[4] = mat2->m;
     int i, k, j;
 
@@ -143,9 +144,11 @@ void mat4_mult(struct mat4 *out, const struct mat4 *mat, const struct mat4 *mat2
             for (k = 0; k < size; k++)
                 sum += a[i][k] * b[k][j];
 
-            out->m[i][j] = sum;
+            ret.m[i][j] = sum;
         }
     }
+
+    *out = ret;
 }
 
 void mat4_mult_vec4(struct vec4 *out, const struct mat4 *mat, const struct vec4 *vec)

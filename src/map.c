@@ -14,7 +14,7 @@ void map_render(struct map *map, struct tri **tri_map, int *tri_count)
 
     for (i = 0; i < map->width; i++)
         for (j = 0; j < map->height; j++)
-            if (map->walls[i * map->width + j])
+            if (map->walls[i * map->height + j])
                 wal_count++;
 
     *tri_map = realloc(*tri_map, sizeof(struct tri) * wal_count * 8);
@@ -22,7 +22,7 @@ void map_render(struct map *map, struct tri **tri_map, int *tri_count)
     /* Height on Z, width on X */
     for (i = 0; i < map->width; i++) {
         for (j = 0; j < map->height; j++) {
-            if (map->walls[i * map->width + j]) {
+            if (map->walls[i * map->height + j]) {
                 struct cube cube = {
                     .tlf = { .x = i , .y = 0, .z = j },
                     .brb = { .x = i + 1, .y = 1, .z = j + 1 },

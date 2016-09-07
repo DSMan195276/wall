@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "container_of.h"
 #include "gl_math.h"
 
 void cone_render(struct tri **tri, int *tri_count, float base_rad, float top_rad, float ymin, float ymax, int steps)

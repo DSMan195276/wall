@@ -16,6 +16,9 @@ const char *ceiling_fragment_shader;
 const char *cone_vertex_shader;
 const char *cone_fragment_shader;
 
+const char *cat_vertex_shader;
+const char *cat_fragment_shader;
+
 GLuint create_shader(const char **vert_shad, const char **frag_shad);
 
 #endif

@@ -84,7 +84,7 @@ static inline void mat4_make_identity(struct mat4 *out)
     *out = (struct mat4)MAT4_IDENTITY();
 }
 
-#define PRvec3 "[%5f %5f %5f]"
+#define PRvec3 "[%5f, %5f, %5f]"
 #define Pvec3(vec) ((vec)->x), ((vec)->y), ((vec)->z)
 
 void print_vec3(struct vec3 *vec);

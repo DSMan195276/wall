@@ -14,8 +14,6 @@
 #include "camera.h"
 #include "render.h"
 
-#define USE_MOUSE 1
-
 void render_element_add(struct render_state *state, struct render_element *element)
 {
     glGenBuffers(1, &element->buffer_id);
@@ -65,7 +63,7 @@ static void render_frame(struct render_state *state)
     glfwPollEvents();
 }
 
-void render_mouse_callback(GLFWwindow *window, double xpos, double ypos)
+static void render_mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
     struct render_state *state = glfwGetWindowUserPointer(window);
     double diffx = xpos - state->m_xpos;
@@ -77,10 +75,21 @@ void render_mouse_callback(GLFWwindow *window, double xpos, double ypos)
     printf("xpos: %f, ypos: %f\n", xpos, ypos);
 
     if (diffx)
-        state->camera.yaw = -xpos / 1000;
+        state->camera.yaw = -xpos / 800;
 
     if (diffy)
-        state->camera.pitch = ypos / 1000;
+        state->camera.pitch = ypos / 800;
+
+    camera_recalc(&state->camera);
+}
+
+static void render_scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    struct render_state *state = glfwGetWindowUserPointer(window);
+
+    printf("yoffset: %f\n", yoffset);
+
+    state->camera.fov += yoffset * 5;
 
     camera_recalc(&state->camera);
 }
@@ -95,11 +104,8 @@ void render_main_loop(struct render_state *state)
     prev_time = glfwGetTime();
 
     glfwSetWindowUserPointer(state->window, state);
-    glfwSetCursorPosCallback(state->window, render_mouse_callback);
 
-#if USE_MOUSE
     int cursor_disabled = 0, m_pressed = 0;
-#endif
     while (!glfwWindowShouldClose(state->window)) {
         int recalc = 0;
         struct key_callback {
@@ -125,20 +131,22 @@ void render_main_loop(struct render_state *state)
             }
         }
 
-#if USE_MOUSE
         if (glfwGetKey(state->window, GLFW_KEY_M) && !m_pressed) {
             if (!cursor_disabled) {
                 glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                glfwSetCursorPosCallback(state->window, render_mouse_callback);
+                glfwSetScrollCallback(state->window, render_scroll_callback);
                 cursor_disabled = 1;
             } else {
                 glfwSetInputMode(state->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                glfwSetCursorPosCallback(state->window, NULL);
+                glfwSetScrollCallback(state->window, NULL);
                 cursor_disabled = 0;
             }
             m_pressed = 1;
         } else if (!glfwGetKey(state->window, GLFW_KEY_M)) {
             m_pressed = 0;
         }
-#endif
 
         if (recalc)
             camera_recalc(&state->camera);

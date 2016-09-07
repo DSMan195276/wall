@@ -57,3 +57,11 @@ SHADER_DEFINE(cone_fragment_shader) {
 # include "shaders/cone_shader.fx"
 };
 
+SHADER_DEFINE(cat_vertex_shader) {
+# include "shaders/cat_shader.vx"
+};
+
+SHADER_DEFINE(cat_fragment_shader) {
+# include "shaders/cat_shader.fx"
+};
+
